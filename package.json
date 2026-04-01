@@ -1,0 +1,25 @@
+{
+  "name": "snyk-enrichment-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server: resolve Snyk org slug to org ID and enrich issues via Snyk REST API",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/snyk-enrichment-mcp-server.git"
+  },
+  "main": "index.js",
+  "bin": {
+    "snyk-enrichment-mcp": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["mcp", "snyk", "jira", "enrichment"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
