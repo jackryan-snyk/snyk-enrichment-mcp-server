@@ -4,7 +4,19 @@
  */
 
 const DEFAULT_BASE = 'https://api.snyk.io/rest';
-const API_VERSION = '2026-01-01';
+
+/**
+ * Snyk REST `version` query param and `Snyk-Version` header use a calendar date (YYYY-MM-DD).
+ * Using the current date at request time avoids hard-coding a version that may lag Snyk releases.
+ * @param {Date} [when] Defaults to now (e.g. for tests).
+ * @returns {string}
+ */
+export function getSnykRestApiVersionDate(when = new Date()) {
+  const y = when.getFullYear();
+  const m = String(when.getMonth() + 1).padStart(2, '0');
+  const d = String(when.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 export class SnykClient {
   /**
@@ -17,21 +29,22 @@ export class SnykClient {
     }
     this.apiToken = apiToken.trim();
     this.baseUrl = baseUrl.replace(/\/$/, '');
-    this.version = API_VERSION;
   }
 
   /**
    * @param {string} method
    * @param {string} pathWithQuery path starting with /, may include ?query
+   * @param {{ version?: string }} [opts]
    * @returns {Promise<unknown>}
    */
-  async request(method, pathWithQuery) {
+  async request(method, pathWithQuery, opts = {}) {
+    const version = opts.version ?? getSnykRestApiVersionDate();
     const url = `${this.baseUrl}${pathWithQuery}`;
     const headers = {
       Authorization: `token ${this.apiToken}`,
       Accept: 'application/vnd.api+json',
       'Content-Type': 'application/vnd.api+json',
-      'Snyk-Version': this.version,
+      'Snyk-Version': version,
     };
 
     const response = await fetch(url, { method, headers });
@@ -57,17 +70,19 @@ export class SnykClient {
   /**
    * @param {string} path
    * @param {Record<string, string | number | boolean | undefined>} params
+   * @param {{ version?: string }} [opts] Override REST `version` query and `Snyk-Version` header (defaults to today's date via {@link getSnykRestApiVersionDate}).
    */
-  async get(path, params = {}) {
+  async get(path, params = {}, opts = {}) {
+    const version = opts.version ?? getSnykRestApiVersionDate();
     const search = new URLSearchParams();
-    search.set('version', this.version);
+    search.set('version', version);
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null) {
         search.set(k, String(v));
       }
     }
     const qs = search.toString();
-    return this.request('GET', `${path}?${qs}`);
+    return this.request('GET', `${path}?${qs}`, { version });
   }
 
   /**
@@ -86,6 +101,7 @@ export class SnykClient {
       throw new Error('Refusing to follow pagination URL with unexpected origin');
     }
     const pathWithQuery = `${u.pathname}${u.search}`;
-    return this.request('GET', pathWithQuery);
+    const v = u.searchParams.get('version');
+    return this.request('GET', pathWithQuery, v ? { version: v } : {});
   }
 }

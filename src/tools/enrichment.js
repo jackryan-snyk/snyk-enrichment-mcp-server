@@ -8,6 +8,30 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * @param {unknown} projectResource JSON:API project resource (`data` from GET project)
+ * @returns {string | null}
+ */
+function targetIdFromProjectResource(projectResource) {
+  const rel = projectResource?.relationships?.target?.data;
+  if (!rel) return null;
+  if (Array.isArray(rel)) {
+    const first = rel.find((x) => typeof x?.id === 'string');
+    return first?.id ?? null;
+  }
+  return typeof rel?.id === 'string' ? rel.id : null;
+}
+
+/**
+ * Snyk project `attributes.origin` for SCM-backed projects is typically `github`.
+ * @param {unknown} origin
+ */
+function isGithubProjectOrigin(origin) {
+  if (origin == null) return false;
+  const s = String(origin).trim().toLowerCase();
+  return s === 'github';
+}
+
+/**
  * Normalize an identifier copied from Jira/HTML (trim, decode URI once).
  * @param {string} raw
  */
@@ -693,6 +717,140 @@ export function createEnrichmentTools(client) {
                   requested_issue_id: hasIssueId ? externalId : null,
                   resolved_rest_issue_id: restIssueId,
                   issue,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      },
+    },
+    {
+      name: 'snyk_get_project_github_repo_url',
+      description:
+        'Resolve the Git repository URL for a Snyk project when it is GitHub-backed. Calls GET /orgs/{org_id}/projects/{project_id}; if attributes.origin is `github`, follows relationships.target to GET /orgs/{org_id}/targets/{target_id} and returns attributes.url as `url`. Uses the same REST API version as other tools (today's date YYYY-MM-DD for the version query param and Snyk-Version header). Requires SNYK_API_TOKEN.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          org_id: {
+            type: 'string',
+            description: 'Snyk organization UUID',
+          },
+          project_id: {
+            type: 'string',
+            description: 'Snyk project UUID',
+          },
+        },
+        required: ['org_id', 'project_id'],
+      },
+      /** @param {{ org_id?: string; project_id?: string }} args */
+      handler: async (args) => {
+        const orgId = String(args.org_id ?? '').trim();
+        const projectId = String(args.project_id ?? '').trim();
+        if (!UUID_RE.test(orgId) || !UUID_RE.test(projectId)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'org_id and project_id must be UUIDs.',
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const projectPayload = await client.get(
+          `/orgs/${orgId}/projects/${projectId}`
+        );
+        const projectResource = projectPayload?.data;
+        const origin = projectResource?.attributes?.origin;
+        if (!isGithubProjectOrigin(origin)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    error: 'Project origin is not GitHub; no GitHub repo URL from this flow',
+                    org_id: orgId,
+                    project_id: projectId,
+                    origin: origin ?? null,
+                    hint: 'Only projects with attributes.origin === "github" expose the repo URL via the linked target.',
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const targetId = targetIdFromProjectResource(projectResource);
+        if (!targetId) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    error: 'GitHub project has no target relationship id',
+                    org_id: orgId,
+                    project_id: projectId,
+                    origin,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const targetPayload = await client.get(
+          `/orgs/${orgId}/targets/${targetId}`
+        );
+        const targetResource = targetPayload?.data;
+        const url =
+          typeof targetResource?.attributes?.url === 'string'
+            ? targetResource.attributes.url
+            : null;
+
+        if (!url) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    error: 'Target response had no attributes.url',
+                    org_id: orgId,
+                    project_id: projectId,
+                    target_id: targetId,
+                    target: targetPayload,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  url,
+                  origin,
+                  org_id: orgId,
+                  project_id: projectId,
+                  target_id: targetId,
                 },
                 null,
                 2
