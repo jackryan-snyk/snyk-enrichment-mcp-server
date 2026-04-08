@@ -729,7 +729,7 @@ export function createEnrichmentTools(client) {
     {
       name: 'snyk_get_project_github_repo_url',
       description:
-        'Resolve the Git repository URL for a Snyk project when it is GitHub-backed. Calls GET /orgs/{org_id}/projects/{project_id}; if attributes.origin is `github`, follows relationships.target to GET /orgs/{org_id}/targets/{target_id} and returns attributes.url as `url`. Uses the same REST API version as other tools (today's date YYYY-MM-DD for the version query param and Snyk-Version header). Requires SNYK_API_TOKEN.',
+        'Resolve the Git repository URL for a Snyk project when it is GitHub-backed. Calls GET /orgs/{org_id}/projects/{project_id}; if attributes.origin is `github`, follows relationships.target to GET /orgs/{org_id}/targets/{target_id} and returns attributes.url as `url`. Uses the same REST API version as other tools (todays date YYYY-MM-DD for the version query param and Snyk-Version header). Requires SNYK_API_TOKEN.',
       inputSchema: {
         type: 'object',
         properties: {
